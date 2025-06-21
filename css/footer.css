@@ -27,6 +27,27 @@ footer {
   width: 30px;
 }
 
+.footer-icons:hover .footer-icons__img {
+  animation: 2s icons-floating;
+}
+
+@keyframes icons-floating {
+  0% {
+    transform: translateY(0px);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
 .footer-icons__desc {
   font-size: 7px;
   font-weight: bold;

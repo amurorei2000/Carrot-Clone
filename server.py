@@ -52,7 +52,9 @@ async def get_item():
     cur = con.cursor()
     # 테이블 데이터 가져오기
     rows = cur.execute(f"""
-                SELECT * FROM items;
+                SELECT * 
+                FROM items
+                ORDER BY insertAt;
                 """).fetchall()
     
     # dict 변환  -> Json 변환
@@ -72,6 +74,19 @@ async def get_image(item_id):
         return Response(content=bytes.fromhex(image_bytes), media_type="image/*")
     except Exception as e:
         print(e)
+        
+@app.post("/signup")
+def signup(id: Annotated[str, Form()],
+           password: Annotated[str, Form()],
+           name: Annotated[str, Form()],
+           email: Annotated[str, Form()]):
+    
+    cur.execute(f"""
+                INSERT INTO users(id, name, email, password)
+                VALUES ('{id}', '{name}', '{email}', '{password}')
+                """)
+    con.commit()
+    return '200'
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 

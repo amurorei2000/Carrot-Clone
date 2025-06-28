@@ -10,6 +10,7 @@ decorator==5.1.1
 distlib==0.3.9
 executing==2.2.0
 fastapi==0.115.13
+fastapi-login==1.10.3
 filelock==3.18.0
 h11==0.16.0
 idna==3.10
@@ -30,6 +31,7 @@ pure_eval==0.2.3
 pydantic==2.11.7
 pydantic_core==2.33.2
 Pygments==2.19.1
+PyJWT==2.10.1
 python-dateutil==2.9.0.post0
 python-multipart==0.0.20
 pywin32==308

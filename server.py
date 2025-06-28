@@ -5,6 +5,9 @@ from typing import Annotated
 import sqlite3
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi_login import LoginManager
+from fastapi_login.exceptions import InvalidCredentialsException
+
 
 con = sqlite3.connect('carot.db', check_same_thread=False)
 cur = con.cursor()
@@ -24,6 +27,54 @@ cur.execute(f"""
 
 app = FastAPI()
 
+# 엑세스 토큰 매니저 생성
+SECRET = "wsdevelop"
+manager = LoginManager(SECRET, "/login")
+        
+@app.post("/signup")
+def signup(id: Annotated[str, Form()],
+           password: Annotated[str, Form()],
+           name: Annotated[str, Form()],
+           email: Annotated[str, Form()]):
+    
+    cur.execute(f"""
+                INSERT INTO users(id, name, email, password)
+                VALUES ('{id}', '{name}', '{email}', '{password}')
+                """)
+    con.commit()
+    return '200'
+
+@manager.user_loader()
+def query_user(id):
+    user = cur.execute(f"""
+                SELECT *
+                FROM users
+                WHERE id = '{id}'
+                """).fetchone()
+    return user
+
+@app.post("/login")
+def login(id: Annotated[str, Form()],
+          password: Annotated[str, Form()]):
+    user = query_user(id)
+    
+    # 유저 정보가 db에 없는 경우
+    if not user:
+        raise InvalidCredentialsException
+    # 입력한 패스워드가 db와 다른 경우
+    elif password != user[3]:
+        raise InvalidCredentialsException
+    
+    # 엑세스 토큰 발급
+    access_token = manager.create_access_token(data={
+        "sub": {
+            "id": user[0],
+            "name": user[1],
+            "email": user[2],
+        }
+    })
+    
+    return {'access_token': access_token}
 
 @app.post("/items")
 async def create_item(image: UploadFile, 
@@ -74,20 +125,8 @@ async def get_image(item_id):
         return Response(content=bytes.fromhex(image_bytes), media_type="image/*")
     except Exception as e:
         print(e)
-        
-@app.post("/signup")
-def signup(id: Annotated[str, Form()],
-           password: Annotated[str, Form()],
-           name: Annotated[str, Form()],
-           email: Annotated[str, Form()]):
-    
-    cur.execute(f"""
-                INSERT INTO users(id, name, email, password)
-                VALUES ('{id}', '{name}', '{email}', '{password}')
-                """)
-    con.commit()
-    return '200'
 
+# 정적 파일 연결(FrontEnd 파일들)
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 if __name__ == '__main__':

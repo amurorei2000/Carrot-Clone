@@ -69,7 +69,7 @@ async def get_image(item_id):
                                 WHERE id={item_id}
                                 """).fetchone()[0]
         
-        return Response(content=bytes.fromhex(image_bytes))
+        return Response(content=bytes.fromhex(image_bytes), media_type="image/*")
     except Exception as e:
         print(e)
 

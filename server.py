@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, Form, Response
+from fastapi import FastAPI, UploadFile, Form, Response, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from typing import Annotated
@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi_login import LoginManager
 from fastapi_login.exceptions import InvalidCredentialsException
+from jose import jwt, JWTError
+from datetime import datetime, timedelta
 
 
 con = sqlite3.connect('carot.db', check_same_thread=False)
@@ -22,6 +24,16 @@ cur.execute(f"""
                 description TEXT,
                 place TEXT NOT NULL,
                 insertAt INTEGER NOT NULL
+            );
+            """)
+
+# users 테이블 생성
+cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                password TEXT NOT NULL
             );
             """)
 
@@ -45,13 +57,37 @@ def signup(id: Annotated[str, Form()],
     return '200'
 
 @manager.user_loader()
-def query_user(id):
-    user = cur.execute(f"""
-                SELECT *
-                FROM users
-                WHERE id = '{id}'
-                """).fetchone()
-    return user
+def query_user(data):
+    print(f"query_user 호출됨 - 타입: {type(data)}")
+    print(f"query_user 호출됨 - 데이터: {data}")
+    
+    try:
+        WHERE_STATEMENTS = f"{data}"
+        if type(data) == dict:
+            WHERE_STATEMENTS = f"{data['sub']['id']}"
+        
+        print(f"추출된 사용자 ID: {WHERE_STATEMENTS}")
+        
+        user = cur.execute(f"""
+                    SELECT *
+                    FROM users
+                    WHERE id = '{WHERE_STATEMENTS}'
+                    """).fetchone()
+        
+        print(f"DB에서 찾은 사용자: {user}")
+        
+        # 사용자를 딕셔너리 형태로 반환
+        if user:
+            return {
+                "id": user[0],
+                "name": user[1], 
+                "email": user[2],
+                "password": user[3]
+            }
+        return None
+    except Exception as e:
+        print(f"query_user 에러: {e}")
+        return None
 
 @app.post("/login")
 def login(id: Annotated[str, Form()],
@@ -62,19 +98,45 @@ def login(id: Annotated[str, Form()],
     if not user:
         raise InvalidCredentialsException
     # 입력한 패스워드가 db와 다른 경우
-    elif password != user[3]:
+    elif password != user['password']:
         raise InvalidCredentialsException
     
     # 엑세스 토큰 발급
     access_token = manager.create_access_token(data={
         "sub": {
-            "id": user[0],
-            "name": user[1],
-            "email": user[2],
+            "id": user['id'],
+            "name": user['name'],
+            "email": user['email'],
         }
-    })
+    },
+        expires=timedelta(minutes=30)
+    )
     
-    return {'access_token': access_token}
+    # 리프레시 토큰 발급
+    refresh_token = jwt.encode(
+        {"sub": {
+            "id": user['id'],
+            "name": user['name'],
+            "email": user['email'],
+        },
+        "exp": datetime.now() + timedelta(days=7) 
+        },
+        key="wsdevelop",
+        algorithm="HS256"
+    )
+    
+    # 쿠키에 저장하기
+    response = Response()
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        max_age=1800,
+        expires=1800
+    )
+    
+    return JSONResponse(content={"accessToken": access_token})
 
 @app.post("/items")
 async def create_item(image: UploadFile, 
@@ -96,7 +158,9 @@ async def create_item(image: UploadFile,
     
     return '200'
 
+# 인증 상태에 의존
 @app.get("/items")
+# async def get_item(user=Depends(manager)):
 async def get_item():
     # 컬럼명 가져오기
     con.row_factory = sqlite3.Row
@@ -108,6 +172,7 @@ async def get_item():
                 ORDER BY insertAt;
                 """).fetchall()
     
+    print(rows)
     # dict 변환  -> Json 변환
     return JSONResponse(jsonable_encoder(dict(row) for row in rows))
 
